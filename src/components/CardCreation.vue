@@ -356,18 +356,19 @@ function clearAllPhotos() {
 }
 
 function randomDeploy() {
-  const emptySlots = []
-  for (let i = 0; i < props.setup.pairs; i++) {
-    if (!images[i]) emptySlots.push(i)
-  }
-  if (emptySlots.length === 0 || savedPhotos.value.length === 0) return
+  if (savedPhotos.value.length === 0) return
 
-  const shuffledSlots = emptySlots.sort(() => Math.random() - 0.5)
+  const allSlots = []
+  for (let i = 0; i < props.setup.pairs; i++) {
+    allSlots.push(i)
+  }
+
+  const shuffledSlots = allSlots.sort(() => Math.random() - 0.5)
   const shuffledPhotos = [...savedPhotos.value].sort(() => Math.random() - 0.5)
 
-  const count = Math.min(shuffledSlots.length, shuffledPhotos.length)
-  for (let i = 0; i < count; i++) {
-    images[shuffledSlots[i]] = { type: 'photo', data: shuffledPhotos[i].data }
+  for (let i = 0; i < shuffledSlots.length; i++) {
+    const photoIndex = i % shuffledPhotos.length
+    images[shuffledSlots[i]] = { type: 'photo', data: shuffledPhotos[photoIndex].data }
   }
 }
 

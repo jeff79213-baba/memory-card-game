@@ -26,6 +26,7 @@
       <GameResult
         v-else-if="screen === 'result'"
         :players="gamePlayers"
+        :gameResult="gameResult"
         @restart="goToSetup"
         @home="goHome"
       />
@@ -46,11 +47,13 @@ const transitionName = ref('fade')
 
 const gameSetup = reactive({
   pairs: 5,
+  gameMode: 'single',
   players: []
 })
 
 const gameCards = ref([])
 const gamePlayers = ref([])
+const gameResult = ref({})
 
 function goHome() {
   transitionName.value = 'fade'
@@ -75,8 +78,13 @@ function startGame(cards, players) {
   screen.value = 'playing'
 }
 
-function goToResult(players) {
-  gamePlayers.value = players
+function goToResult(result) {
+  gamePlayers.value = result.players
+  gameResult.value = {
+    time: result.time,
+    flips: result.flips,
+    isSinglePlayer: result.isSinglePlayer
+  }
   transitionName.value = 'slide-left'
   screen.value = 'result'
 }

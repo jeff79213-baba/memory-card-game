@@ -2,16 +2,36 @@
   <div class="screen game-screen">
     <div class="game-header">
       <button class="home-btn" @click="$emit('back')">🏠</button>
-      <div class="turn-indicator">
-        <span class="turn-avatar" :style="{ background: currentPlayer.color }">
-          {{ currentPlayer.name.charAt(0) }}
-        </span>
-        <span class="turn-name">{{ currentPlayer.name }} 的回合</span>
-      </div>
-      <div class="timer" v-if="showTimer">{{ formatTime(matchTimer) }}</div>
+
+      <template v-if="isSinglePlayer">
+        <div class="single-stats">
+          <div class="stat-item">
+            <span class="stat-icon">⏱️</span>
+            <span class="stat-value">{{ formatTime(matchTimer) }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-icon">🔄</span>
+            <span class="stat-value">{{ flipCount }} 次</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-icon">✅</span>
+            <span class="stat-value">{{ matchedCount }} / {{ totalPairs }}</span>
+          </div>
+        </div>
+      </template>
+
+      <template v-else>
+        <div class="turn-indicator">
+          <span class="turn-avatar" :style="{ background: currentPlayer.color }">
+            {{ currentPlayer.name.charAt(0) }}
+          </span>
+          <span class="turn-name">{{ currentPlayer.name }} 的回合</span>
+        </div>
+        <div class="timer">{{ formatTime(matchTimer) }}</div>
+      </template>
     </div>
 
-    <div class="scoreboard">
+    <div v-if="!isSinglePlayer" class="scoreboard">
       <div
         v-for="(player, index) in players"
         :key="index"
@@ -31,7 +51,7 @@
         :style="gridStyle"
       >
         <div
-          v-for="card in cards"
+          v-for="card in localCards"
           :key="card.id"
           :class="['card', {
             flipped: card.flipped || card.matched,
@@ -86,9 +106,11 @@ const showMatchEffect = ref(false)
 const message = ref('')
 const messageType = ref('')
 const matchTimer = ref(0)
-const showTimer = ref(false)
+const flipCount = ref(0)
 let messageTimeout = null
 let timerInterval = null
+
+const isSinglePlayer = computed(() => props.setup.gameMode === 'single')
 
 const players = computed(() => {
   return props.setup.players.map(p => ({ ...p }))
@@ -100,6 +122,12 @@ const currentPlayer = computed(() => {
 
 const canFlip = computed(() => {
   return flippedCards.value.length < 2 && !isChecking.value
+})
+
+const totalPairs = computed(() => props.setup.pairs)
+
+const matchedCount = computed(() => {
+  return localCards.value.filter(c => c.matched).length / 2
 })
 
 const gridStyle = computed(() => {
@@ -138,6 +166,7 @@ function flipCard(card) {
 
   card.flipped = true
   flippedCards.value.push(card)
+  flipCount.value++
 
   if (flippedCards.value.length === 2) {
     isChecking.value = true
@@ -154,7 +183,7 @@ function checkMatch() {
       card2.matched = true
       players.value[currentPlayerIndex.value].score++
       showMatchEffect.value = true
-      showMessageMsg('配對成功！繼續翻牌', 'success')
+      showMessageMsg('配對成功！', 'success')
 
       setTimeout(() => {
         showMatchEffect.value = false
@@ -164,8 +193,14 @@ function checkMatch() {
       isChecking.value = false
 
       if (allMatched.value) {
+        clearInterval(timerInterval)
         setTimeout(() => {
-          emit('end', players.value)
+          emit('end', {
+            players: players.value,
+            time: matchTimer.value,
+            flips: flipCount.value,
+            isSinglePlayer: isSinglePlayer.value
+          })
         }, 1000)
       }
     }, 600)
@@ -178,7 +213,9 @@ function checkMatch() {
       setTimeout(() => {
         flippedCards.value = []
         isChecking.value = false
-        nextPlayer()
+        if (!isSinglePlayer.value) {
+          nextPlayer()
+        }
       }, 500)
     }, 1000)
   }
@@ -234,6 +271,33 @@ function formatTime(seconds) {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+}
+
+.single-stats {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  justify-content: center;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--bg-card);
+  border-radius: 20px;
+}
+
+.stat-icon {
+  font-size: 16px;
+}
+
+.stat-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: white;
 }
 
 .turn-indicator {

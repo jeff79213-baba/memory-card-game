@@ -8,6 +8,28 @@
 
     <div class="setup-content">
       <div class="setup-section">
+        <h3>選擇遊戲模式</h3>
+        <div class="mode-selector">
+          <button
+            :class="['mode-btn', { active: gameMode === 'single' }]"
+            @click="gameMode = 'single'"
+          >
+            <span class="mode-icon">🎯</span>
+            <span class="mode-label">單人挑戰</span>
+            <span class="mode-desc">計時計次挑戰</span>
+          </button>
+          <button
+            :class="['mode-btn', { active: gameMode === 'multi' }]"
+            @click="gameMode = 'multi'"
+          >
+            <span class="mode-icon">👥</span>
+            <span class="mode-label">多人對戰</span>
+            <span class="mode-desc">2~12人輪流翻牌</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="setup-section">
         <h3>選擇卡片組數</h3>
         <p class="hint">每組 2 張相同卡片</p>
         <div class="pair-selector">
@@ -23,7 +45,7 @@
         </div>
       </div>
 
-      <div class="setup-section">
+      <div v-if="gameMode === 'multi'" class="setup-section">
         <h3>選擇玩家人數</h3>
         <div class="player-count-grid">
           <button
@@ -37,7 +59,7 @@
         </div>
       </div>
 
-      <div class="setup-section">
+      <div v-if="gameMode === 'multi'" class="setup-section">
         <h3>玩家名稱</h3>
         <div class="players-input">
           <div
@@ -76,6 +98,7 @@ const emit = defineEmits(['start', 'back'])
 const pairs = ref(5)
 const playerCount = ref(2)
 const playerNames = ref(['', ''])
+const gameMode = ref('single')
 
 const playerColors = [
   '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
@@ -100,11 +123,14 @@ watch(playerCount, (newCount) => {
 function goNext() {
   const setup = {
     pairs: pairs.value,
-    players: players.value.map((p, i) => ({
-      name: p.name || ('玩家 ' + (i + 1)),
-      color: p.color,
-      score: 0
-    }))
+    gameMode: gameMode.value,
+    players: gameMode.value === 'single'
+      ? [{ name: '玩家', color: '#6C5CE7', score: 0 }]
+      : players.value.map((p, i) => ({
+          name: p.name || ('玩家 ' + (i + 1)),
+          color: p.color,
+          score: 0
+        }))
   }
   emit('start', setup)
 }
@@ -220,6 +246,44 @@ function goNext() {
 
 .card-info strong {
   color: var(--primary-light);
+}
+
+.mode-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.mode-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 12px;
+  background: var(--bg-card);
+  border-radius: 16px;
+  border: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.mode-btn.active {
+  border-color: var(--primary);
+  background: rgba(108, 92, 231, 0.2);
+}
+
+.mode-icon {
+  font-size: 32px;
+}
+
+.mode-label {
+  font-size: 16px;
+  font-weight: 700;
+  color: white;
+}
+
+.mode-desc {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .player-count-grid {

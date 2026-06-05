@@ -5,58 +5,96 @@
     </div>
 
     <div class="result-content">
-      <div class="trophy-area">
-        <div class="trophy">🏆</div>
-        <h1 class="winner-name">{{ winner.name }}</h1>
-        <p class="winner-text">獲得勝利！</p>
-      </div>
-
-      <div class="podium">
-        <div v-if="players.length > 2" class="podium-item second">
-          <div class="podium-avatar" :style="{ background: sortedPlayers[1].color }">
-            {{ sortedPlayers[1].name.charAt(0) }}
+      <template v-if="gameResult.isSinglePlayer">
+        <div class="single-result">
+          <div class="trophy-area">
+            <div class="trophy">🏆</div>
+            <h1 class="winner-name">過關！</h1>
           </div>
-          <div class="podium-name">{{ sortedPlayers[1].name }}</div>
-          <div class="podium-score">{{ sortedPlayers[1].score }} 分</div>
-          <div class="podium-bar bar-2"></div>
-          <div class="podium-rank">🥈</div>
-        </div>
 
-        <div class="podium-item first">
-          <div class="podium-avatar" :style="{ background: winner.color }">
-            {{ winner.name.charAt(0) }}
+          <div class="stats-grid">
+            <div class="stat-card">
+              <span class="stat-icon">⏱️</span>
+              <span class="stat-label">完成時間</span>
+              <span class="stat-value">{{ formatTime(gameResult.time) }}</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-icon">🔄</span>
+              <span class="stat-label">翻牌次數</span>
+              <span class="stat-value">{{ gameResult.flips }} 次</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-icon">📊</span>
+              <span class="stat-label">效率評分</span>
+              <span class="stat-value">{{ efficiency }}</span>
+            </div>
           </div>
-          <div class="podium-name">{{ winner.name }}</div>
-          <div class="podium-score">{{ winner.score }} 分</div>
-          <div class="podium-bar bar-1"></div>
-          <div class="podium-rank">🥇</div>
-        </div>
 
-        <div v-if="players.length > 1" class="podium-item third">
-          <div class="podium-avatar" :style="{ background: sortedPlayers[2].color }">
-            {{ sortedPlayers[2].name.charAt(0) }}
+          <div class="rating-message">{{ ratingMessage }}</div>
+        </div>
+      </template>
+
+      <template v-else>
+        <div class="multi-result">
+          <div class="trophy-area">
+            <div class="trophy">🏆</div>
+            <h1 class="winner-name">{{ winner.name }}</h1>
+            <p class="winner-text">獲得勝利！</p>
           </div>
-          <div class="podium-name">{{ sortedPlayers[2].name }}</div>
-          <div class="podium-score">{{ sortedPlayers[2].score }} 分</div>
-          <div class="podium-bar bar-3"></div>
-          <div class="podium-rank">🥉</div>
-        </div>
-      </div>
 
-      <div v-if="players.length > 3" class="other-players">
-        <div
-          v-for="(player, index) in sortedPlayers.slice(3)"
-          :key="player.name"
-          class="other-player"
-        >
-          <span class="other-rank">#{{ index + 4 }}</span>
-          <span class="other-avatar" :style="{ background: player.color }">
-            {{ player.name.charAt(0) }}
-          </span>
-          <span class="other-name">{{ player.name }}</span>
-          <span class="other-score">{{ player.score }} 分</span>
+          <div class="podium">
+            <div v-if="players.length > 2" class="podium-item second">
+              <div class="podium-avatar" :style="{ background: sortedPlayers[1].color }">
+                {{ sortedPlayers[1].name.charAt(0) }}
+              </div>
+              <div class="podium-name">{{ sortedPlayers[1].name }}</div>
+              <div class="podium-score">{{ sortedPlayers[1].score }} 分</div>
+              <div class="podium-bar bar-2"></div>
+              <div class="podium-rank">🥈</div>
+            </div>
+
+            <div class="podium-item first">
+              <div class="podium-avatar" :style="{ background: winner.color }">
+                {{ winner.name.charAt(0) }}
+              </div>
+              <div class="podium-name">{{ winner.name }}</div>
+              <div class="podium-score">{{ winner.score }} 分</div>
+              <div class="podium-bar bar-1"></div>
+              <div class="podium-rank">🥇</div>
+            </div>
+
+            <div v-if="players.length > 1" class="podium-item third">
+              <div class="podium-avatar" :style="{ background: sortedPlayers[2].color }">
+                {{ sortedPlayers[2].name.charAt(0) }}
+              </div>
+              <div class="podium-name">{{ sortedPlayers[2].name }}</div>
+              <div class="podium-score">{{ sortedPlayers[2].score }} 分</div>
+              <div class="podium-bar bar-3"></div>
+              <div class="podium-rank">🥉</div>
+            </div>
+          </div>
+
+          <div v-if="players.length > 3" class="other-players">
+            <div
+              v-for="(player, index) in sortedPlayers.slice(3)"
+              :key="player.name"
+              class="other-player"
+            >
+              <span class="other-rank">#{{ index + 4 }}</span>
+              <span class="other-avatar" :style="{ background: player.color }">
+                {{ player.name.charAt(0) }}
+              </span>
+              <span class="other-name">{{ player.name }}</span>
+              <span class="other-score">{{ player.score }} 分</span>
+            </div>
+          </div>
+
+          <div class="time-info" v-if="gameResult.time">
+            <span>⏱️ 完成時間：{{ formatTime(gameResult.time) }}</span>
+            <span>🔄 總翻牌：{{ gameResult.flips }} 次</span>
+          </div>
         </div>
-      </div>
+      </template>
 
       <div class="action-buttons">
         <button class="action-btn play-again" @click="$emit('restart')">
@@ -74,7 +112,11 @@
 import { computed } from 'vue'
 
 const props = defineProps({
-  players: Array
+  players: Array,
+  gameResult: {
+    type: Object,
+    default: () => ({})
+  }
 })
 
 defineEmits(['restart', 'home'])
@@ -86,6 +128,30 @@ const sortedPlayers = computed(() => {
 const winner = computed(() => {
   return sortedPlayers.value[0]
 })
+
+const efficiency = computed(() => {
+  if (!props.gameResult.flips || !props.gameResult.time) return '-'
+  const pairs = props.players[0]?.score || 1
+  const idealFlips = pairs
+  const ratio = idealFlips / props.gameResult.flips
+  const timeBonus = Math.max(0, 1 - props.gameResult.time / 300)
+  const score = Math.round((ratio * 70 + timeBonus * 30) * 100)
+  return Math.min(100, Math.max(0, score)) + ' 分'
+})
+
+const ratingMessage = computed(() => {
+  const score = parseInt(efficiency.value) || 0
+  if (score >= 90) return '太厲害了！記憶力超強！'
+  if (score >= 70) return '很不錯！繼續保持！'
+  if (score >= 50) return '還可以，再試一次吧！'
+  return '多練習幾次會更好喔！'
+})
+
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
 
 function confettiStyle(i) {
   const colors = ['#FF6B6B', '#4ECDC4', '#FDCB6E', '#A29BFE', '#FD79A8', '#00CEC9']
@@ -162,6 +228,52 @@ function confettiStyle(i) {
 .winner-text {
   font-size: 18px;
   color: var(--text-muted);
+}
+
+.single-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 20px;
+  background: var(--bg-card);
+  border-radius: 16px;
+  min-width: 100px;
+}
+
+.stat-card .stat-icon {
+  font-size: 24px;
+}
+
+.stat-card .stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.stat-card .stat-value {
+  font-size: 18px;
+  font-weight: 900;
+  color: white;
+}
+
+.rating-message {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--primary-light);
+  text-align: center;
 }
 
 .podium {
@@ -284,6 +396,13 @@ function confettiStyle(i) {
   font-size: 14px;
   font-weight: 700;
   color: var(--warning);
+}
+
+.time-info {
+  display: flex;
+  gap: 20px;
+  font-size: 14px;
+  color: var(--text-muted);
 }
 
 .action-buttons {

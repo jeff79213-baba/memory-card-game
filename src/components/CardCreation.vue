@@ -19,11 +19,13 @@
           :key="index"
           :class="['slot', { filled: images[index], active: currentSlot === index }]"
           @click="selectSlot(index)"
+          @dragover.prevent
+          @drop="onDrop($event, index)"
         >
           <template v-if="images[index]">
             <img v-if="images[index].type === 'photo'" :src="images[index].data" class="slot-image" />
             <span v-else class="slot-emoji">{{ images[index].data }}</span>
-            <button class="remove-btn" @click.stop="removeImage(index)">×</button>
+            <button class="replace-hint">點擊替換</button>
           </template>
           <template v-else>
             <span class="slot-plus">+</span>
@@ -31,8 +33,8 @@
         </div>
       </div>
 
-      <div v-if="currentSlot !== null && !images[currentSlot]" class="source-panel">
-        <p class="source-hint">選擇圖案來源</p>
+      <div v-if="currentSlot !== null" class="source-panel">
+        <p class="source-hint">{{ images[currentSlot] ? '替換圖案' : '選擇圖案來源' }}</p>
         <div class="source-buttons">
           <button class="source-btn camera" @click="openCamera">
             <span class="source-icon">📷</span>
@@ -46,6 +48,30 @@
             <span class="source-icon">😊</span>
             <span>選擇圖案</span>
           </button>
+        </div>
+      </div>
+
+      <div v-if="savedPhotos.length > 0" class="saved-photos-section">
+        <div class="saved-photos-header">
+          <p class="source-hint">已儲存的照片（可拖拉到上方格子替換）</p>
+          <div class="saved-photos-actions">
+            <button class="add-photo-btn" @click="openUpload">+ 上傳照片</button>
+            <button class="random-btn" @click="randomDeploy">🎲 隨機部署</button>
+            <button class="clear-all-btn" @click="clearAllPhotos">清除全部</button>
+          </div>
+        </div>
+        <div class="saved-photos-grid">
+          <div
+            v-for="(photo, index) in savedPhotos"
+            :key="index"
+            class="saved-photo-item"
+            draggable="true"
+            @dragstart="onDragStart($event, photo)"
+            @click="useSavedPhoto(photo)"
+          >
+            <img :src="photo.data" class="saved-photo-img" />
+            <button class="saved-photo-delete" @click.stop="deleteSavedPhoto(index)">×</button>
+          </div>
         </div>
       </div>
     </div>
@@ -66,6 +92,7 @@
       type="file"
       accept="image/*"
       capture="environment"
+      multiple
       style="display:none"
       @change="handleCameraCapture"
     />
@@ -73,6 +100,7 @@
       ref="uploadInput"
       type="file"
       accept="image/*"
+      multiple
       style="display:none"
       @change="handleFileUpload"
     />
@@ -113,7 +141,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 
 const props = defineProps({
   setup: Object
@@ -126,8 +154,11 @@ const uploadInput = ref(null)
 const currentSlot = ref(null)
 const showEmojiPicker = ref(false)
 const activeCategory = ref('faces')
+const savedPhotos = ref([])
 
 const images = reactive({})
+
+const defaultEmojis = ['🐶', '🐱', '🐰', '🦊', '🐼', '🦁', '🐸', '🐵', '🍎', '🏀']
 
 const emojiCategories = {
   faces: {
@@ -152,6 +183,39 @@ const emojiCategories = {
   }
 }
 
+onMounted(() => {
+  loadSavedPhotos()
+  initDefaultImages()
+})
+
+function initDefaultImages() {
+  const shuffled = [...defaultEmojis].sort(() => Math.random() - 0.5)
+  for (let i = 0; i < props.setup.pairs; i++) {
+    if (!images[i]) {
+      images[i] = { type: 'emoji', data: shuffled[i % shuffled.length] }
+    }
+  }
+}
+
+function loadSavedPhotos() {
+  try {
+    const saved = localStorage.getItem('memory-game-photos')
+    if (saved) {
+      savedPhotos.value = JSON.parse(saved)
+    }
+  } catch (e) {
+    savedPhotos.value = []
+  }
+}
+
+function savePhotosToStorage() {
+  try {
+    localStorage.setItem('memory-game-photos', JSON.stringify(savedPhotos.value))
+  } catch (e) {
+    console.warn('儲存照片失敗，可能已超過儲存空間')
+  }
+}
+
 const filledCount = computed(() => {
   return Object.values(images).filter(Boolean).length
 })
@@ -161,7 +225,9 @@ const allFilled = computed(() => {
 })
 
 function selectSlot(index) {
-  if (!images[index]) {
+  if (currentSlot.value === index) {
+    currentSlot.value = null
+  } else {
     currentSlot.value = index
   }
 }
@@ -176,56 +242,133 @@ function openUpload() {
   uploadInput.value.click()
 }
 
-function processImage(file, callback) {
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    const img = new Image()
-    img.onload = () => {
-      const canvas = document.createElement('canvas')
-      const maxSize = 400
-      let width = img.width
-      let height = img.height
+function processImage(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const maxSize = 400
+        let width = img.width
+        let height = img.height
 
-      if (width > height) {
-        if (width > maxSize) {
-          height = (height * maxSize) / width
-          width = maxSize
+        if (width > height) {
+          if (width > maxSize) {
+            height = (height * maxSize) / width
+            width = maxSize
+          }
+        } else {
+          if (height > maxSize) {
+            width = (width * maxSize) / height
+            height = maxSize
+          }
         }
-      } else {
-        if (height > maxSize) {
-          width = (width * maxSize) / height
-          height = maxSize
-        }
+
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, width, height)
+
+        resolve(canvas.toDataURL('image/jpeg', 0.8))
       }
-
-      canvas.width = width
-      canvas.height = height
-      const ctx = canvas.getContext('2d')
-      ctx.drawImage(img, 0, 0, width, height)
-
-      callback(canvas.toDataURL('image/jpeg', 0.85))
+      img.src = e.target.result
     }
-    img.src = e.target.result
+    reader.readAsDataURL(file)
+  })
+}
+
+async function handleCameraCapture(e) {
+  const files = Array.from(e.target.files)
+  if (files.length === 0) return
+
+  for (const file of files) {
+    const data = await processImage(file)
+    addToSavedPhotos(data)
+
+    if (currentSlot.value !== null && !images[currentSlot.value]) {
+      images[currentSlot.value] = { type: 'photo', data }
+      moveToNextSlot()
+    }
   }
-  reader.readAsDataURL(file)
 }
 
-function handleCameraCapture(e) {
-  const file = e.target.files[0]
-  if (!file) return
-  processImage(file, (data) => {
-    images[currentSlot.value] = { type: 'photo', data }
-    moveToNextSlot()
-  })
+async function handleFileUpload(e) {
+  const files = Array.from(e.target.files)
+  if (files.length === 0) return
+
+  for (const file of files) {
+    const data = await processImage(file)
+    addToSavedPhotos(data)
+
+    if (currentSlot.value !== null && !images[currentSlot.value]) {
+      images[currentSlot.value] = { type: 'photo', data }
+      moveToNextSlot()
+    }
+  }
 }
 
-function handleFileUpload(e) {
-  const file = e.target.files[0]
-  if (!file) return
-  processImage(file, (data) => {
-    images[currentSlot.value] = { type: 'photo', data }
-    moveToNextSlot()
-  })
+function addToSavedPhotos(data) {
+  const exists = savedPhotos.value.some(p => p.data === data)
+  if (!exists) {
+    savedPhotos.value.unshift({ data })
+    if (savedPhotos.value.length > 20) {
+      savedPhotos.value = savedPhotos.value.slice(0, 20)
+    }
+    savePhotosToStorage()
+  }
+}
+
+function useSavedPhoto(photo) {
+  let slotIndex = currentSlot.value
+  if (slotIndex === null) {
+    slotIndex = findNextEmptySlot()
+    if (slotIndex === null) {
+      slotIndex = 0
+    }
+    currentSlot.value = slotIndex
+  }
+  images[slotIndex] = { type: 'photo', data: photo.data }
+  moveToNextSlot()
+}
+
+function onDragStart(e, photo) {
+  e.dataTransfer.setData('photoData', photo.data)
+}
+
+function onDrop(e, slotIndex) {
+  const photoData = e.dataTransfer.getData('photoData')
+  if (photoData) {
+    images[slotIndex] = { type: 'photo', data: photoData }
+  }
+}
+
+function deleteSavedPhoto(index) {
+  savedPhotos.value.splice(index, 1)
+  savePhotosToStorage()
+}
+
+function clearAllPhotos() {
+  if (confirm('確定要清除所有已儲存的照片嗎？')) {
+    savedPhotos.value = []
+    savePhotosToStorage()
+  }
+}
+
+function randomDeploy() {
+  const emptySlots = []
+  for (let i = 0; i < props.setup.pairs; i++) {
+    if (!images[i]) emptySlots.push(i)
+  }
+  if (emptySlots.length === 0 || savedPhotos.value.length === 0) return
+
+  const shuffledSlots = emptySlots.sort(() => Math.random() - 0.5)
+  const shuffledPhotos = [...savedPhotos.value].sort(() => Math.random() - 0.5)
+
+  const count = Math.min(shuffledSlots.length, shuffledPhotos.length)
+  for (let i = 0; i < count; i++) {
+    images[shuffledSlots[i]] = { type: 'photo', data: shuffledPhotos[i].data }
+  }
 }
 
 function selectEmoji(emoji) {
@@ -234,19 +377,16 @@ function selectEmoji(emoji) {
   moveToNextSlot()
 }
 
-function moveToNextSlot() {
+function findNextEmptySlot() {
   for (let i = 0; i < props.setup.pairs; i++) {
-    if (!images[i]) {
-      currentSlot.value = i
-      return
-    }
+    if (!images[i]) return i
   }
-  currentSlot.value = null
+  return null
 }
 
-function removeImage(index) {
-  images[index] = undefined
-  currentSlot.value = index
+function moveToNextSlot() {
+  const next = findNextEmptySlot()
+  currentSlot.value = next
 }
 
 function startGame() {
@@ -262,8 +402,8 @@ function startGame() {
   })
 
   for (let i = cards.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[cards[i], cards[j]] = [cards[j], cards[i]]
+    const j = Math.floor(Math.random() * (i + 1));
+    [cards[i], cards[j]] = [cards[j], cards[i]]
   }
 
   emit('start', cards, props.setup.players)
@@ -384,24 +524,22 @@ function startGame() {
   font-size: 40px;
 }
 
-.remove-btn {
+.replace-hint {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: rgba(255, 107, 107, 0.9);
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  font-size: 10px;
+  background: rgba(0, 0, 0, 0.7);
   color: white;
-  font-size: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border-radius: 8px;
   opacity: 0;
   transition: opacity 0.2s;
+  white-space: nowrap;
 }
 
-.slot:hover .remove-btn, .slot.filled .remove-btn {
+.slot:hover .replace-hint, .slot.active .replace-hint {
   opacity: 1;
 }
 
@@ -448,6 +586,116 @@ function startGame() {
 
 .source-icon {
   font-size: 32px;
+}
+
+.saved-photos-section {
+  margin-top: 8px;
+}
+
+.saved-photos-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.saved-photos-header .source-hint {
+  margin-bottom: 0;
+  text-align: left;
+}
+
+.saved-photos-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.add-photo-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--success);
+  background: rgba(0, 184, 148, 0.1);
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.random-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--primary-light);
+  background: rgba(108, 92, 231, 0.15);
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.clear-all-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--danger);
+  background: rgba(255, 107, 107, 0.1);
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.saved-photos-grid {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.saved-photos-grid::-webkit-scrollbar {
+  height: 4px;
+}
+
+.saved-photos-grid::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  border-radius: 2px;
+}
+
+.saved-photo-item {
+  position: relative;
+  width: 70px;
+  height: 70px;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  flex-shrink: 0;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s;
+}
+
+.saved-photo-item:active {
+  transform: scale(0.95);
+  border-color: var(--primary);
+}
+
+.saved-photo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.saved-photo-delete {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 107, 107, 0.9);
+  color: white;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.saved-photo-item:hover .saved-photo-delete {
+  opacity: 1;
 }
 
 .bottom-bar {
